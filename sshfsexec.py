@@ -69,10 +69,10 @@ def sshfsmountmap():
 
     mapping = dict()
     if platform.system() == "Darwin":
-        proc = subprocess.Popen("df -t osxfusefs|/usr/bin/grep -v Filesystem", shell=True, stdout=subprocess.PIPE)
+        proc = subprocess.Popen("mount -t osxfusefs", shell=True, stdout=subprocess.PIPE)
         for line in iter(proc.stdout.readline,''):
-            fields = line.split(' ')
-            mountpoint = unescape(os.path.abspath(fields[20])).strip()
+            fields = re.sub(r"\s+", " ", line).split()
+            mountpoint = unescape(os.path.abspath(fields[2]))
 
             remote, path = fields[0].split(':', 1)
             mapping[mountpoint] = (remote, os.path.abspath(unescape(path)))
