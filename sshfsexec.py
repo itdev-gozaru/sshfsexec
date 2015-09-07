@@ -4,9 +4,11 @@ from __future__ import print_function
 import errno
 import os
 import pipes
+import platform
 import re
 import sys
 import stat
+import subprocess
 
 EXIT_COMMAND_NOT_FOUND = 127
 EXIT_SSHFS_HOST_MISMATCH = 1
@@ -66,19 +68,29 @@ def sshfsmountmap():
         return re.sub("\\\\[0-7]{1,3}", suboctal, path)
 
     mapping = dict()
-    with open("/proc/self/mountinfo") as iostream:
-        for line in iostream:
+    if platform.system() == "Darwin":
+        proc = subprocess.Popen("df -t osxfusefs|/usr/bin/grep -v Filesystem", shell=True, stdout=subprocess.PIPE)
+        for line in iter(proc.stdout.readline,''):
             fields = line.split(' ')
-            fstype = fields[-3]
-            mountpoint = unescape(os.path.abspath(fields[4]))
+            mountpoint = unescape(os.path.abspath(fields[20])).strip()
 
-            if fstype == 'fuse.sshfs':
-                remote, path = fields[-2].split(':', 1)
-                device = os.makedev(*(map(int, fields[2].split(':'))))
-                mapping[mountpoint] = (remote, os.path.abspath(unescape(path)))
+            remote, path = fields[0].split(':', 1)
+            mapping[mountpoint] = (remote, os.path.abspath(unescape(path)))
+        proc.stdout.close()
+    else:
+        with open("/proc/self/mountinfo") as iostream:
+            for line in iostream:
+                fields = line.split(' ')
+                fstype = fields[-3]
+                mountpoint = unescape(os.path.abspath(fields[4]))
 
-            else:
-                mapping[mountpoint] = None
+                if fstype == 'fuse.sshfs':
+                    remote, path = fields[-2].split(':', 1)
+                    device = os.makedev(*(map(int, fields[2].split(':'))))
+                    mapping[mountpoint] = (remote, os.path.abspath(unescape(path)))
+
+                else:
+                    mapping[mountpoint] = None
 
     return mapping
 
@@ -238,7 +250,8 @@ def main(configcode=''):
         if ttyoption == '-T':
             argv += ['-e', 'none']
 
-        argv += [sshlogin, ttyoption, sshcommand]
+        logoption = '-o LogLevel=QUIET'
+        argv += [logoption, sshlogin, ttyoption, sshcommand]
 
     else:
         # If the command does not interact with any SSHFS-mounted paths, run
